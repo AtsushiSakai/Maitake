@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="動画をアップロードせず、ブラウザ内でMP4・MOV・AVI・WebMへ変換。">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; worker-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>Maitake — 動画を、手元で変換。</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="12" rx="2"/><path d="M2 19h20M9 15v4M15 15v4"/></symbol>
+  </defs></svg>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Maitake ホーム"><span class="brand-icon"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M9 5H5v5m14-5h4v5M5 18v5h4m14-5v5h-4"/><path class="play-mark" d="m11 9 8 5-8 5z"/></svg></span><span>maitake<span class="brand-dot">.</span></span></a>
+    <nav aria-label="メイン"><a class="nav-active" href="#converter">動画を変換</a><button class="text-button" id="privacy-open">プライバシーについて <svg class="icon"><use href="#i-lock"/></svg></button></nav>
+    <span class="local-badge"><span></span> 動画のアップロードなし</span>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow"><span></span> YOUR VIDEO. YOUR DEVICE.</p><h1>動画の形式を、<br class="mobile-break">手元で変える<span class="accent">。</span></h1><p class="hero-copy">形式を変えて、使いたい場所へ。<br>動画をアップロードしない、プライベートな動画変換。</p></div>
+    </section>
+    <section class="privacy-notice" aria-label="動画データのプライバシー">
+      <span class="privacy-notice-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span>
+      <div><h2>動画データは、どこにもアップロードされません。</h2><p>選択した動画・音声・ファイル名を外部に送信せず、変換はすべてこのブラウザ内で行います。</p></div>
+    </section>
+    <div id="error" class="error-banner" role="alert" hidden></div>
+    <section class="converter" id="converter" aria-label="動画変換">
+      <div class="source-panel">
+        <div class="section-heading"><h2><span class="step">01</span>動画を選ぶ</h2><span class="muted tiny">最大300MB・1ファイルずつ</span></div>
+        <div class="dropzone" id="dropzone">
+          <div class="file-art" aria-hidden="true"><div class="art-file art-back"><span>WEBM</span><svg class="icon"><use href="#i-film"/></svg></div><div class="art-arrow"><svg class="icon"><use href="#i-arrow"/></svg></div><div class="art-file art-front"><svg class="icon"><use href="#i-film"/></svg><span>MP4</span></div><i class="art-dot dot-one"></i><i class="art-dot dot-two"></i></div>
+          <h3>ここに動画をドロップ</h3><p>または、デバイスからファイルを選択</p>
+          <button class="choose-button" id="choose"><svg class="icon"><use href="#i-plus"/></svg>動画を選択</button>
+          <input type="file" id="file-input" accept="video/*,.mkv,.avi,.mov,.webm,.mp4,.m4v,.mts,.m2ts,.flv,.wmv,.ogv" hidden>
+          <span class="accepted">WebM / MP4 / MOV / AVI ほか</span>
+        </div>
+        <div class="selected-file" id="selected-file" hidden>
+          <div class="preview-wrap"><video id="input-preview" controls playsinline preload="metadata" aria-label="入力動画のプレビュー"></video><div id="preview-unavailable" class="preview-unavailable" hidden><svg class="icon"><use href="#i-film"/></svg><span>この形式はプレビューできません</span><small>動画の読み込み・変換は続けられます。</small></div><span class="preview-label">ORIGINAL</span></div>
+          <div class="file-info"><div class="file-type" id="file-type">WEBM</div><div class="file-description"><strong id="file-name"></strong><span id="file-meta"></span></div><button id="remove-file" class="icon-button" aria-label="動画を取り除く"><svg class="icon"><use href="#i-close"/></svg></button></div>
+          <p class="source-details" id="source-details">動画の情報を確認しています…</p>
+        </div>
+        <div class="source-bottom"><span class="source-privacy"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>動画は外部に送信されません</span><button class="sample-button" id="sample">サンプルで試す <span>↗</span></button></div>
+        <div class="source-footnote"><svg class="icon"><use href="#i-device"/></svg><p>変換に使うのは、あなたのデバイスの力。<br><span>インストールも、アカウント登録も必要ありません。</span></p></div>
+      </div>
+      <div class="settings-panel">
+        <div class="section-heading"><h2><span class="step">02</span>出力を設定</h2><span class="tiny muted">お好みに合わせて</span></div>
+        <fieldset id="format-options"><legend>出力形式</legend><div class="format-grid">
+          <label class="format-option"><input type="radio" name="format" value="mp4" checked><span class="format-name">MP4 <small>おすすめ</small></span><span class="format-caption">幅広いデバイスに</span></label>
+          <label class="format-option"><input type="radio" name="format" value="mov"><span class="format-name">MOV</span><span class="format-caption">Mac・iPhone向け</span></label>
+          <label class="format-option"><input type="radio" name="format" value="avi"><span class="format-name">AVI</span><span class="format-caption">AVI指定のソフトに</span></label>
+          <label class="format-option"><input type="radio" name="format" value="webm"><span class="format-name">WebM</span><span class="format-caption">Ubuntu・ブラウザに</span></label>
+        </div></fieldset>
+        <fieldset id="quality-options"><legend>品質</legend><div class="quality-grid">
+          <label><input type="radio" name="quality" value="high"><span>最高</span><small>画質を優先</small></label>
+          <label><input type="radio" name="quality" value="medium" checked><span>中</span><small>バランス</small></label>
+          <label><input type="radio" name="quality" value="light"><span>軽量</span><small>容量を抑える</small></label>
+        </div><p class="quality-description" id="quality-description">最大1080p・30fps。画質とサイズのちょうどいいバランス。</p></fieldset>
+        <div class="output-summary"><span>保存する動画</span><strong id="output-summary">MP4 <span>／</span> 品質：中</strong><span id="codec-label">H.264 / AAC</span></div>
+        <button class="convert-button" id="convert" disabled><span>MP4に変換</span><svg class="icon"><use href="#i-arrow"/></svg></button>
+        <p class="convert-hint" id="convert-hint">まずは、変換する動画を選んでください。</p>
+      </div>
+    </section>
+    <section class="status-card" id="status-card" hidden aria-label="変換状況">
+      <div class="status-top"><div><span class="eyebrow" id="status-label">PROCESSING ON YOUR DEVICE</span><h2 id="status-title" role="status" aria-live="polite">準備しています…</h2></div><button class="cancel-button" id="cancel">キャンセル</button></div>
+      <div class="progress-track" id="progress" role="progressbar" aria-label="変換の進捗" aria-valuemin="0" aria-valuemax="100"><div id="progress-fill"></div></div>
+      <div class="progress-info"><span id="status-description">初回は変換プログラム（約32MB）を読み込みます。</span><span id="progress-text"></span></div>
+    </section>
+    <section class="result-card" id="result-card" hidden aria-label="変換結果">
+      <div class="result-header"><span class="success-icon"><svg class="icon"><use href="#i-check"/></svg></span><div><p class="eyebrow">READY TO GO</p><h2>変換できました。</h2><p id="result-description"></p></div><a class="download-button" id="download" download><svg class="icon"><use href="#i-download"/></svg><span>動画を保存</span></a></div>
+      <video id="output-preview" controls playsinline preload="metadata" aria-label="変換した動画のプレビュー" hidden></video><p id="output-preview-note" class="muted tiny" hidden></p>
+    </section>
+    <div class="details-row"><details><summary>形式選びに迷ったら</summary><p id="format-note"></p><p>どの環境でも必ず再生できる形式はありません。Ubuntuは標準プレーヤーや追加コーデック、iPhoneは機種・OSによって対応が異なります。</p></details><details><summary>品質とファイルサイズについて</summary><p>「最高」は元の解像度とフレームレートを基本に維持しますが、完全な無劣化変換ではありません。「中」は最大1080p・30fps、「軽量」は最大720p・30fpsです。縦動画にも対応し、小さい動画は拡大しません。</p><p>再圧縮により元より大きくなる場合があります。出力は最大600MBです。このバージョンではHDR動画を対象外とし、映像1トラックと先頭の音声1トラックを保存します。字幕や追加トラックは保存しません。</p></details></div>
+  </main>
+  <footer><span class="footer-brand">maitake.</span><span>小さな変換を、もっと気軽に。</span><a class="footer-license" href="./sources/">ライセンス・ソース</a><span class="footer-end">LOCAL FIRST, ALWAYS. <span class="version">v0.1.0</span></span></footer>
+  <dialog id="privacy-dialog"><div class="dialog-top"><h2>動画は、あなたの手元に。</h2><button class="icon-button" id="privacy-close" aria-label="閉じる"><svg class="icon"><use href="#i-close"/></svg></button></div><p>選択した動画・音声・ファイル名は外部に送信しません。変換処理はブラウザ内で行い、動画をサーバーに保存する機能はありません。</p><p>ページ、変換プログラム、サンプル動画を読み込む通信は発生します。これらはすべてこのサイトから配信します。広告、解析ツール、外部CDNは使用しません。</p><p>読み込んだ動画と変換結果はこのタブ内で一時的に扱い、履歴として保存しません。保存ボタンを押した動画は端末に残ります。タブを閉じると処理は終了します。</p><p class="muted tiny">このサイトはGitHub Pagesで配信しています。ページへのアクセス情報はホスティング事業者によって記録される場合があります。</p><a class="license-link" href="./third-party-notices.txt" target="_blank" rel="noopener">利用ライブラリについて ↗</a></dialog>
+  <noscript><p class="error-banner">動画を変換するにはJavaScriptを有効にしてください。</p></noscript>
+</body>
+</html>
