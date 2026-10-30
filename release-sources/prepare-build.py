@@ -44,4 +44,4 @@ for source in manifest['sources']:
     text = re.sub(pattern, f'COPY vendor-src/{source["name"]} /src', text)
 text = text.replace('RUN git clone --recursive -b $ZIMG_BRANCH https://github.com/sekrit-twc/zimg.git /src', 'COPY vendor-src/zimg /src')
 dockerfile.write_text(text)
-print('Source ready. Run: cd ' + str(context) + ' && make prd')
+print('Source ready. Run: cd ' + str(context) + ' && make prd && make prd-mt')

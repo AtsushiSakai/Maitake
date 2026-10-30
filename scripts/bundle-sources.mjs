@@ -34,5 +34,5 @@ await writeFile(`${directory}/index.html`, `<!doctype html>
 <a href="../">← Maitake</a><h1>ライセンスとソースコード</h1>
 <p>Maitakeで使用する変換ライブラリの対応ソース、ビルド手順、元のライセンス・著作権表示を配布しています。ダウンロードに登録は不要です。</p>
 <p><a href="../third-party-notices.txt">ライセンス表示</a> · <a href="./README.txt">ビルド手順</a> · <a href="./prepare-build.py">ソース取得・展開スクリプト</a> · <a href="./manifest.json">バージョン・SHA-256一覧</a> · <a href="https://github.com/AtsushiSakai/Maitake">Maitakeのソース</a></p>
-<p>FFmpeg core ${manifest.coreVersion} / wrapper ${manifest.wrapperVersion}。以下は閲覧者が明示的に取得する開発用ソースです。通常の動画変換では読み込みません。</p><ul>${entries}</ul></html>`);
+<p>FFmpeg core ${manifest.coreVersion} / core-mt ${manifest.coreMtVersion} / wrapper ${manifest.wrapperVersion}。以下は閲覧者が明示的に取得する開発用ソースです。通常の動画変換では読み込みません。</p><ul>${entries}</ul></html>`);
 console.log(`Release sources verified: ${manifest.sources.length} archives.`);

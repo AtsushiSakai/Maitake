@@ -56,3 +56,24 @@ test('filename extraction is case-insensitive and save names are portable', () =
   assert.equal(outputName('clip:one.MOV', 'mp4', 'high'), 'clip_one_high.mp4');
   assert.equal(frameRate('0/0'), 0);
 });
+
+test('parallel recipes preserve all format and quality settings while bounding worker counts', () => {
+  const withoutThreads = values => values.filter((value, index, list) =>
+    !['-threads', '-filter_threads'].includes(value) && !['-threads', '-filter_threads'].includes(list[index - 1]));
+  for (const format of ['mp4', 'mov', 'avi', 'webm']) {
+    for (const quality of ['high', 'medium', 'light']) {
+      const single = args(format, quality);
+      for (const threads of [2, 3, 4]) {
+        const parallel = buildArgs({ input: '/input/source.webm', format, quality, info, threads });
+        assert.deepEqual(withoutThreads(parallel), withoutThreads(single));
+        assert.deepEqual(parallel.flatMap((value, index) => value === '-threads' ? [parallel[index + 1]] : []), [String(threads), String(threads)]);
+        assert.equal(option(parallel, '-filter_threads'), String(threads));
+      }
+      assert.deepEqual(buildArgs({ input: '/input/source.webm', format, quality, info, threads: 1 }), single);
+      assert.ok(!single.includes('-filter_threads'));
+    }
+  }
+  for (const threads of [0, -1, 1.5, 5, NaN, Infinity, '2']) {
+    assert.throws(() => buildArgs({ input: '/input/source.webm', format: 'mp4', quality: 'medium', info, threads }));
+  }
+});

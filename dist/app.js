@@ -1,10 +1,12 @@
 import { FFmpeg } from './vendor/ffmpeg/index.js';
 import { FORMATS, QUALITIES, MAX_OUTPUT_BYTES, validateFile, extension, outputName, summarizeProbe, buildArgs } from './recipes.js';
+import { selectEngineConfig, coreURLs } from './engine-config.js';
 
 const $ = id => document.getElementById(id);
 let source = null, info = null, engine = null, prepared = false, busy = false;
 let generation = 0, inputURL = null, outputURL = null, progressTimer = null, phase = '', lastPercent = 0;
 let format = 'mp4', quality = 'medium';
+let engineConfig = { mode: 'single', threads: 1 }, singleThreadOnly = false;
 const logs = [];
 const filesize = n => n < 1_000_000 ? `${(n / 1000).toFixed(0)} KB` : `${(n / 1_000_000).toFixed(1)} MB`;
 const duration = n => !n ? '長さ不明' : `${Math.floor(Math.round(n) / 60)}:${String(Math.round(n) % 60).padStart(2, '0')}`;
@@ -63,6 +65,7 @@ async function readProbe(ff, path, id, out = 'metadata.json') {
 async function prepare(id) {
   if (prepared && engine?.loaded) return engine;
   status('変換プログラムを準備しています…', '初回は約32MBを読み込みます。動画は送信されません。');
+  engineConfig = selectEngineConfig({ isolated: globalThis.crossOriginIsolated, sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined', hardwareConcurrency: navigator.hardwareConcurrency, deviceMemory: navigator.deviceMemory }, singleThreadOnly);
   const ff = new FFmpeg(); engine = ff;
   ff.on('log', ({ message }) => { if (id === generation) { logs.push(message); if (logs.length > 40) logs.shift(); } });
   ff.on('progress', ({ time }) => {
@@ -73,20 +76,49 @@ async function prepare(id) {
   });
   let loadTimer;
   try {
-    await Promise.race([ff.load({ coreURL: assetURL('./vendor/core/ffmpeg-core.js'), wasmURL: assetURL('./vendor/core/ffmpeg-core.wasm') }), new Promise((_, reject) => { loadTimer = setTimeout(() => reject(new Error('変換プログラムの読み込みに時間がかかっています。接続を確認し、もう一度お試しください。')), 120_000); })]);
+    await Promise.race([ff.load(coreURLs(engineConfig, import.meta.url)), new Promise((_, reject) => { loadTimer = setTimeout(() => reject(new Error('変換プログラムの読み込みに時間がかかっています。接続を確認し、もう一度お試しください。')), 120_000); })]);
+    clearTimeout(loadTimer);
+    assertCurrent(id);
+    status('動画の形式を確認しています…', 'ファイルの中身を、このブラウザ内で確認しています。');
+    await ff.createDir('/input'); assertCurrent(id);
+    // WORKERFS reads slices of a local File, avoiding a full input copy in WASM memory.
+    const localFile = new File([source], `source.${extension(source.name)}`, { type: source.type });
+    const mounted = await ff.mount('WORKERFS', { files: [localFile] }, '/input'); assertCurrent(id);
+    if (!mounted) throw new Error('動画の読み込みに失敗しました。ページを再読み込みしてください。');
+    const path = `/input/${localFile.name}`;
+    info = await readProbe(ff, path, id); assertCurrent(id);
+    if (info.hdr) throw new Error('このバージョンはHDR動画の変換に対応していません。通常のSDR動画を選んでください。');
+    prepared = true; renderInfo();
+    return ff;
+  } catch (error) {
+    assertCurrent(id);
+    if (engineConfig.mode !== 'multi') throw error;
+    // A fresh worker releases the shared heap and partially mounted input.
+    console.warn('[Maitake] Parallel engine unavailable; retrying the standard engine.', String(error));
+    singleThreadOnly = true; releaseEngine();
+    return await prepare(id);
   } finally { clearTimeout(loadTimer); }
-  assertCurrent(id);
-  status('動画の形式を確認しています…', 'ファイルの中身を、このブラウザ内で確認しています。');
-  await ff.createDir('/input'); assertCurrent(id);
-  // WORKERFS reads slices of a local File, avoiding a full input copy in WASM memory.
-  const localFile = new File([source], `source.${extension(source.name)}`, { type: source.type });
-  const mounted = await ff.mount('WORKERFS', { files: [localFile] }, '/input'); assertCurrent(id);
-  if (!mounted) throw new Error('動画の読み込みに失敗しました。ページを再読み込みしてください。');
-  const path = `/input/${localFile.name}`;
-  info = await readProbe(ff, path, id); assertCurrent(id);
-  if (info.hdr) throw new Error('このバージョンはHDR動画の変換に対応していません。通常のSDR動画を選んでください。');
-  prepared = true; renderInfo();
-  return ff;
+}
+async function executeConversion(id, selectedFormat, selectedQuality) {
+  for (;;) {
+    const ff = await prepare(id); assertCurrent(id);
+    const inputInfo = { ...info };
+    phase = 'converting';
+    status(`${FORMATS[selectedFormat].title}に変換しています…`, 'このタブを閉じずにお待ちください。キャンセルはいつでもできます。', !!info.duration);
+    $('progress-fill').style.width = '0%'; $('progress').setAttribute('aria-valuenow', '0');
+    try {
+      const result = await ff.exec(buildArgs({ input: `/input/source.${extension(source.name)}`, format: selectedFormat, quality: selectedQuality, info, threads: engineConfig.threads }));
+      assertCurrent(id);
+      if (result !== 0) throw new Error('変換に失敗しました。未対応の圧縮形式、またはメモリ不足の可能性があります。別の形式や「軽量」でお試しください。');
+      return { ff, inputInfo };
+    } catch (error) {
+      assertCurrent(id);
+      if (engineConfig.mode !== 'multi') throw error;
+      // Retry only once, preserving settings and discarding all partial output.
+      console.warn('[Maitake] Parallel conversion failed; retrying the standard engine.', String(error));
+      singleThreadOnly = true; releaseEngine(); lastPercent = 0; phase = 'preparing';
+    }
+  }
 }
 async function selectFile(file) {
   if (busy || !file) return;
@@ -126,19 +158,14 @@ async function convert() {
   // Keep the generation while reusing a prepared engine and its progress callbacks.
   const id = generation, selectedFormat = format, selectedQuality = quality;
   setBusy(true); lastPercent = 0; phase = 'preparing';
+  $('input-preview').pause();
   try {
-    const ff = await prepare(id); assertCurrent(id);
-    const inputInfo = { ...info };
-    phase = 'converting';
-    status(`${FORMATS[format].title}に変換しています…`, 'このタブを閉じずにお待ちください。キャンセルはいつでもできます。', !!info.duration);
-    $('progress-fill').style.width = '0%'; $('progress').setAttribute('aria-valuenow', '0');
     const started = performance.now();
     const tick = () => { $('progress-text').textContent = `${info.duration ? `${lastPercent}% · ` : ''}${Math.floor((performance.now() - started) / 1000)}秒経過`; };
     tick(); progressTimer = setInterval(tick, 1000);
-    const result = await ff.exec(buildArgs({ input: `/input/source.${extension(source.name)}`, format, quality, info }));
+    const { ff, inputInfo } = await executeConversion(id, selectedFormat, selectedQuality);
     assertCurrent(id); phase = 'finishing';
     clearInterval(progressTimer); progressTimer = null;
-    if (result !== 0) throw new Error('変換に失敗しました。未対応の圧縮形式、またはメモリ不足の可能性があります。別の形式や「軽量」でお試しください。');
     status('変換した動画を確認しています…', 'ファイルを確認して、保存できるようにしています。');
     const outputPath = `output.${selectedFormat}`;
     const verified = await readProbe(ff, outputPath, id, 'output-metadata.json'); assertCurrent(id);

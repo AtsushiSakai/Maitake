@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Use a multi-thread FFmpeg engine with bounded codec/filter concurrency on supported browsers, preserving output formats and quality settings.
+- Fall back to the single-thread engine when parallel initialization or conversion fails.
+- Enable isolation within the application's Service Worker scope on static hosts, before file selection.
+- Add reproducible local Chrome performance and conversion checks.
+
 ## 0.1.0
 
 - Initial Maitake release: video conversion entirely inside the browser.

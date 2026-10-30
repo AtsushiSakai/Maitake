@@ -1,5 +1,6 @@
 {
   "coreVersion": "0.12.10",
+  "coreMtVersion": "0.12.10",
   "wrapperVersion": "0.12.15",
   "upstreamCommit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
   "sources": [

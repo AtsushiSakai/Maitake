@@ -3,7 +3,8 @@ Maitake 0.1.0 — corresponding source and build instructions
 Application source: https://github.com/AtsushiSakai/Maitake
 Source downloads: https://atsushisakai.github.io/Maitake/sources/
 
-The distributed @ffmpeg/core 0.12.10 binary is unmodified. The upstream
+The distributed @ffmpeg/core and @ffmpeg/core-mt 0.12.10 binaries are
+unmodified. Both use the same corresponding source. The upstream
 release commit is 71aa99d37c02a7b4c435275ca9ef50e612f6efa1 (tag v12.15),
 which also contains @ffmpeg/ffmpeg 0.12.15. Its Dockerfile, Makefile,
 build scripts, C bindings, JavaScript wrapper, and third-party sources
@@ -12,7 +13,7 @@ SHA-256 digest. Original copyright notices and license files are retained
 inside the source archives. See ../licenses/FFmpeg-GPLv2.txt and
 ../third-party-notices.txt for the main license notices.
 
-Rebuild the single-thread production core (Linux / Docker Buildx):
+Rebuild the single-thread and multi-thread production cores (Linux / Docker Buildx):
 
 1. Download prepare-build.py to an empty directory.
 2. Run with Python 3.12 or newer:
@@ -23,12 +24,16 @@ Rebuild the single-thread production core (Linux / Docker Buildx):
 3. Install Docker with Buildx and GNU Make. Run:
      cd maitake-core-source/build-context
      make prd
+     make prd-mt
 4. ESM output is in packages/core/dist/esm/ffmpeg-core.js and
    packages/core/dist/esm/ffmpeg-core.wasm. UMD output is also generated.
+   Multi-thread output is in packages/core-mt/dist/esm/, including
+   ffmpeg-core.js, ffmpeg-core.wasm, and ffmpeg-core.worker.js.
 
 The build uses Emscripten SDK 3.1.40, FFmpeg n5.1.4, and the library
 versions in manifest.json. Production flags are -O3 -msimd128 and
-FFMPEG_ST=yes; the full feature configuration is in Dockerfile.upstream
+FFMPEG_ST=yes for core. core-mt additionally uses -sUSE_PTHREADS -pthread,
+with FFMPEG_MT=yes. The full feature configuration is in Dockerfile.upstream
 and the included build/ scripts. The base Docker image, Ubuntu packages,
 and Emscripten SDL build tooling require network access at build time.
 The original upstream Dockerfile is also included. The preparation script
@@ -43,7 +48,9 @@ Rebuilding the core is optional for building the web app itself:
 
 License scope:
 - @ffmpeg/ffmpeg wrapper: MIT.
-- @ffmpeg/core: GPL-2.0-or-later, including GPL-enabled codecs.
+- @ffmpeg/core and @ffmpeg/core-mt: GPL-2.0-or-later, including GPL-enabled codecs.
+- coi-serviceworker 0.1.7: MIT. Its unmodified source is available at
+  ../coi-serviceworker.js and license at ../licenses/coi-serviceworker-MIT.txt.
 - Individual dependencies retain their own licenses and notices, as
   included in their source archives. The wrapper's MIT license does not
   replace any of these licenses.

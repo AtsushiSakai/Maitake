@@ -33,16 +33,18 @@ export function summarizeProbe(probe) {
   const duration = Number(probe.format?.duration || video.duration || 0);
   return { videoIndex: video.index, width: rotated ? video.height : video.width, height: rotated ? video.width : video.height, fps: frameRate(video.avg_frame_rate || video.r_frame_rate), duration: Number.isFinite(duration) ? duration : 0, codec: video.codec_name, audio: audio?.codec_name, hdr: ['smpte2084', 'arib-std-b67'].includes(video.color_transfer) };
 }
-export function buildArgs({ input, format, quality, info }) {
+export function buildArgs({ input, format, quality, info, threads = 1 }) {
   const q = QUALITIES[quality];
   if (!q || !FORMATS[format]) throw new Error('出力設定が正しくありません。');
+  if (!Number.isInteger(threads) || threads < 1 || threads > 4) throw new Error('処理スレッド数が正しくありません。');
   // Normalize anamorphic pixels and even dimensions before scaling. FFmpeg autorotates first.
   const filters = ['scale=trunc(iw*sar/2)*2:trunc(ih/2)*2', 'setsar=1'];
   if (q.long) {
     filters.push(`scale=w='if(gte(iw,ih),min(iw,${q.long}),min(iw,${q.short}))':h='if(gte(iw,ih),min(ih,${q.short}),min(ih,${q.long}))':force_original_aspect_ratio=decrease:force_divisible_by=2`);
     if (info.fps > 30 || !info.fps) filters.push('fps=30');
   }
-  const args = ['-hide_banner', '-loglevel', 'info', '-threads', '1', '-i', input, '-map', `0:${info.videoIndex}`, '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-vf', filters.join(','), '-ac', '2', '-ar', '48000'];
+  const args = ['-hide_banner', '-loglevel', 'info', '-threads', String(threads), '-i', input, '-map', `0:${info.videoIndex}`, '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-vf', filters.join(','), '-ac', '2', '-ar', '48000'];
+  if (threads > 1) args.push('-filter_threads', String(threads));
   if (format === 'mp4' || format === 'mov') {
     args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(q.crf), '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', q.audio, '-movflags', '+faststart');
   } else if (format === 'avi') {
@@ -54,6 +56,6 @@ export function buildArgs({ input, format, quality, info }) {
     const bitrate = Math.max(250_000, Math.round(pixels * Math.min(info.fps || 30, q.long ? 30 : 60) * { high: 0.2, medium: 0.12, light: 0.08 }[quality]));
     args.push('-c:v', 'libvpx', '-deadline', 'good', '-cpu-used', '4', '-b:v', String(bitrate), '-crf', String(q.vp8), '-pix_fmt', 'yuv420p', '-c:a', 'libvorbis', '-q:a', String({ high: 5, medium: 3, light: 1 }[quality]));
   }
-  args.push('-threads', '1', '-fs', String(MAX_OUTPUT_BYTES), `output.${format}`);
+  args.push('-threads', String(threads), '-fs', String(MAX_OUTPUT_BYTES), `output.${format}`);
   return args;
 }

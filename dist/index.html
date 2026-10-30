@@ -9,7 +9,7 @@
   <title>Maitake — 動画を、手元で変換。</title>
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./bootstrap.js"></script>
 </head>
 <body>
   <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -42,27 +42,27 @@
         <div class="dropzone" id="dropzone">
           <div class="file-art" aria-hidden="true"><div class="art-file art-back"><span>WEBM</span><svg class="icon"><use href="#i-film"/></svg></div><div class="art-arrow"><svg class="icon"><use href="#i-arrow"/></svg></div><div class="art-file art-front"><svg class="icon"><use href="#i-film"/></svg><span>MP4</span></div><i class="art-dot dot-one"></i><i class="art-dot dot-two"></i></div>
           <h3>ここに動画をドロップ</h3><p>または、デバイスからファイルを選択</p>
-          <button class="choose-button" id="choose"><svg class="icon"><use href="#i-plus"/></svg>動画を選択</button>
-          <input type="file" id="file-input" accept="video/*,.mkv,.avi,.mov,.webm,.mp4,.m4v,.mts,.m2ts,.flv,.wmv,.ogv" hidden>
+          <button class="choose-button" id="choose" disabled><svg class="icon"><use href="#i-plus"/></svg>動画を選択</button>
+          <input type="file" id="file-input" disabled accept="video/*,.mkv,.avi,.mov,.webm,.mp4,.m4v,.mts,.m2ts,.flv,.wmv,.ogv" hidden>
           <span class="accepted">WebM / MP4 / MOV / AVI ほか</span>
         </div>
         <div class="selected-file" id="selected-file" hidden>
           <div class="preview-wrap"><video id="input-preview" controls playsinline preload="metadata" aria-label="入力動画のプレビュー"></video><div id="preview-unavailable" class="preview-unavailable" hidden><svg class="icon"><use href="#i-film"/></svg><span>この形式はプレビューできません</span><small>動画の読み込み・変換は続けられます。</small></div><span class="preview-label">ORIGINAL</span></div>
-          <div class="file-info"><div class="file-type" id="file-type">WEBM</div><div class="file-description"><strong id="file-name"></strong><span id="file-meta"></span></div><button id="remove-file" class="icon-button" aria-label="動画を取り除く"><svg class="icon"><use href="#i-close"/></svg></button></div>
+          <div class="file-info"><div class="file-type" id="file-type">WEBM</div><div class="file-description"><strong id="file-name"></strong><span id="file-meta"></span></div><button id="remove-file" disabled class="icon-button" aria-label="動画を取り除く"><svg class="icon"><use href="#i-close"/></svg></button></div>
           <p class="source-details" id="source-details">動画の情報を確認しています…</p>
         </div>
-        <div class="source-bottom"><span class="source-privacy"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>動画は外部に送信されません</span><button class="sample-button" id="sample">サンプルで試す <span>↗</span></button></div>
+        <div class="source-bottom"><span class="source-privacy"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>動画は外部に送信されません</span><button class="sample-button" id="sample" disabled>サンプルで試す <span>↗</span></button></div>
         <div class="source-footnote"><svg class="icon"><use href="#i-device"/></svg><p>変換に使うのは、あなたのデバイスの力。<br><span>インストールも、アカウント登録も必要ありません。</span></p></div>
       </div>
       <div class="settings-panel">
         <div class="section-heading"><h2><span class="step">02</span>出力を設定</h2><span class="tiny muted">お好みに合わせて</span></div>
-        <fieldset id="format-options"><legend>出力形式</legend><div class="format-grid">
+        <fieldset id="format-options" disabled><legend>出力形式</legend><div class="format-grid">
           <label class="format-option"><input type="radio" name="format" value="mp4" checked><span class="format-name">MP4 <small>おすすめ</small></span><span class="format-caption">幅広いデバイスに</span></label>
           <label class="format-option"><input type="radio" name="format" value="mov"><span class="format-name">MOV</span><span class="format-caption">Mac・iPhone向け</span></label>
           <label class="format-option"><input type="radio" name="format" value="avi"><span class="format-name">AVI</span><span class="format-caption">AVI指定のソフトに</span></label>
           <label class="format-option"><input type="radio" name="format" value="webm"><span class="format-name">WebM</span><span class="format-caption">Ubuntu・ブラウザに</span></label>
         </div></fieldset>
-        <fieldset id="quality-options"><legend>品質</legend><div class="quality-grid">
+        <fieldset id="quality-options" disabled><legend>品質</legend><div class="quality-grid">
           <label><input type="radio" name="quality" value="high"><span>最高</span><small>画質を優先</small></label>
           <label><input type="radio" name="quality" value="medium" checked><span>中</span><small>バランス</small></label>
           <label><input type="radio" name="quality" value="light"><span>軽量</span><small>容量を抑える</small></label>

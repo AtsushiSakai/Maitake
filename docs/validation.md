@@ -1,5 +1,9 @@
 # Maitake 0.1.0 validation
 
+## Unreleased multithread validation — 2026-10-30
+
+The local Chrome performance and regression results are recorded in [the comparison report](performance-2026-10-30.md). The previous release checks below are historical. No new deployment or Windows measurement is implied by the local results.
+
 ## Confirmed before publication
 
 - Seven automated recipe tests pass: file-size boundaries, MP4/MOV codecs, AVI/WebM codecs, quality presets, frame-rate handling, metadata parsing, and filenames.

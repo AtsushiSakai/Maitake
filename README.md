@@ -28,6 +28,7 @@ pnpm dev
 - 変換後に再解析し、空ファイル・出力上限到達・明らかに短い結果を保存可能な完成品として表示しない。
 - 出力600MB上限。大きくなりやすいAVIには特に注意。
 - 初回の変換エンジンは約32MB。同一サイトに同梱し、外部CDN・広告・解析SDKは不使用。
+- 対応環境ではCPU・メモリに応じて2〜4スレッドで変換。並列エンジンの準備や変換が失敗した場合は、同じ品質設定で単一スレッド版に一度だけ切り替えます。
 - デモ動画は自作の短いアニメーション。`scripts/make-sample.py`で生成 (開発時のみPillowとFFmpegが必要)。
 
 ## Compatibility and limits
@@ -48,7 +49,13 @@ pnpm test
 
 ## GitHub Pages
 
-`pnpm build`の後、`dist/`全体を静的サイトとして配信します。相対パスなので`https://owner.github.io/repository/`配下に対応します。単一スレッド版でCOOP/COEPヘッダーは不要です。変換APIはありません。
+`pnpm build`の後、`dist/`全体を静的サイトとして配信します。相対パスなので`https://owner.github.io/repository/`配下に対応します。変換APIはありません。
+
+並列エンジンは`SharedArrayBuffer`とcross-origin isolationを必要とします。GitHub Pagesでは同梱のService Workerがアプリのディレクトリ内にCOOP/COEPヘッダーを付けます。初回だけ、ファイル選択を有効にする前に再読み込みします。登録できない場合は単一スレッド版で動作し、ファイル選択後に自動再読み込みしません。Service Workerは動画や変換結果をキャッシュしません。
+
+2〜4スレッドの上限は各コーデック・フィルターの処理に適用します。上流のcore-mt自体は1GiBの共有WASMメモリと32個の待機用workerを準備します。端末のメモリが2GiB以下と判定できる場合は、最初から単一スレッド版を使います。
+
+配信サブパスも含めて確認する場合は、`BASE_PATH=/Maitake/ PORT=4174 pnpm dev`で起動できます。`scripts/smoke-test.mjs`はPlaywrightとChromeで、並列変換・従来方式への切り替え・キャンセル・再試行を確認します。`TEST_BASE_URL`、`PLAYWRIGHT_MODULE`、`CHROME_PATH`で対象URLと実行環境を指定できます。
 
 `main`へのPushで`.github/workflows/pages.yml`がテスト、公開用ビルド、Pagesへの配信を行います。`dist/vendor/`と`dist/sources/`は生成物のためGit管理から除外し、CIでチェックサムを検証してPagesアーティファクトに含めます。
 

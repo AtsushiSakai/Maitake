@@ -5,7 +5,7 @@ Copyright (c) 2019 Jerome Wu. MIT License.
 Full license: licenses/ffmpeg-wrapper-MIT.txt
 Source: https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
 
-@ffmpeg/core 0.12.10
+@ffmpeg/core 0.12.10 and @ffmpeg/core-mt 0.12.10
 WebAssembly build of FFmpeg, including third-party codecs and filters.
 This component is not covered solely by the wrapper's MIT license.
 FFmpeg / x264 / x265 and other components retain their respective licenses.
@@ -16,13 +16,21 @@ Upstream component list and licensing notes:
 https://ffmpegwasm.netlify.app/docs/overview/
 https://ffmpegwasm.netlify.app/docs/faq/
 
-The unmodified @ffmpeg/core 0.12.10 binary is GPL-2.0-or-later.
+The unmodified @ffmpeg/core and @ffmpeg/core-mt 0.12.10 binaries are
+GPL-2.0-or-later and share the corresponding source/build project above.
 Corresponding source archives, original license/copyright notices, pinned
 checksums, and build instructions are available without registration at:
   https://atsushisakai.github.io/Maitake/sources/
 These sources include the upstream release build scripts, codec libraries,
 Emscripten runtime source, SDL, and the zimg test submodule. Original
 licenses and notices remain inside each source archive.
+
+coi-serviceworker 0.1.7
+Copyright (c) 2021 Guido Zuidhof and contributors. MIT License.
+Full license: licenses/coi-serviceworker-MIT.txt
+Unmodified source bundled at: coi-serviceworker.js
+Upstream project: https://github.com/gzuidhof/coi-serviceworker
+Registered only under Maitake's own directory, without response caching.
 
 The bundled sample video and SVG graphics were created for this prototype.
 No remote fonts, stock media, analytics libraries, or external CDNs are used.
