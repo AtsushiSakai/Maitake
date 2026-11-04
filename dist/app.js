@@ -1,6 +1,7 @@
 import { FFmpeg } from './vendor/ffmpeg/index.js';
 import { FORMATS, QUALITIES, MAX_OUTPUT_BYTES, validateFile, extension, outputName, summarizeProbe, buildArgs } from './recipes.js';
 import { selectEngineConfig, coreURLs } from './engine-config.js';
+import { appendDiagnosticLog, buildDiagnosticReport } from './diagnostics.js';
 
 const $ = id => document.getElementById(id);
 let source = null, info = null, engine = null, prepared = false, busy = false;
@@ -8,6 +9,8 @@ let generation = 0, inputURL = null, outputURL = null, progressTimer = null, pha
 let format = 'mp4', quality = 'medium';
 let engineConfig = { mode: 'single', threads: 1 }, singleThreadOnly = false;
 const logs = [];
+let diagnosticStage = '', diagnosticCommand = [], diagnosticAttempts = [], diagnosticInput = null;
+let diagnosticInfo = null, diagnosticEngine = null;
 const filesize = n => n < 1_000_000 ? `${(n / 1000).toFixed(0)} KB` : `${(n / 1_000_000).toFixed(1)} MB`;
 const duration = n => !n ? '長さ不明' : `${Math.floor(Math.round(n) / 60)}:${String(Math.round(n) % 60).padStart(2, '0')}`;
 const assetURL = name => new URL(name, import.meta.url).href;
@@ -19,8 +22,47 @@ function setBusy(value) {
   if (value) $('convert-hint').textContent = 'このタブを開いたままお待ちください。';
   else $('convert-hint').textContent = source && info ? '動画は外部に送信されません。' : 'まずは、変換する動画を選んでください。';
 }
-function showError(message) { $('error').textContent = message; $('error').hidden = false; }
-function clearError() { $('error').hidden = true; $('error').textContent = ''; }
+function resetDiagnostics(file = null, inputInfo = null) {
+  logs.length = 0; diagnosticAttempts = []; diagnosticCommand = []; diagnosticStage = '';
+  diagnosticInput = file ? { extension: extension(file.name), size: file.size, type: file.type } : null;
+  diagnosticInfo = inputInfo; diagnosticEngine = null;
+}
+function recordFallback(error) {
+  diagnosticAttempts.push({ error, stage: diagnosticStage, engineConfig: { ...engineConfig }, logs: [...logs], command: [...diagnosticCommand] });
+  logs.length = 0; diagnosticCommand = [];
+}
+function showError(message, error = new Error(message)) {
+  $('error-message').textContent = message;
+  $('error-report').value = buildDiagnosticReport({
+    error, stage: diagnosticStage, input: diagnosticInput, info: diagnosticInfo, format, quality,
+    engineConfig: diagnosticEngine, logs, attempts: diagnosticAttempts, command: diagnosticCommand,
+    version: document.querySelector('.version').textContent,
+    environment: { userAgent: navigator.userAgent, crossOriginIsolated: globalThis.crossOriginIsolated,
+      sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined', hardwareConcurrency: navigator.hardwareConcurrency,
+      deviceMemory: navigator.deviceMemory ?? '不明' },
+  });
+  $('copy-error-status').textContent = ''; $('copy-error-details').disabled = false;
+  $('error-details').open = true; $('error').hidden = false;
+  $('error').scrollIntoView({ block: 'nearest' });
+}
+function clearError() {
+  $('error').hidden = true; $('error-message').textContent = ''; $('error-report').value = '';
+  $('copy-error-status').textContent = ''; $('copy-error-details').disabled = false;
+}
+async function copyErrorDetails() {
+  const report = $('error-report').value;
+  if (!report) return;
+  $('copy-error-details').disabled = true;
+  try {
+    await navigator.clipboard.writeText(report);
+    if ($('error-report').value === report) $('copy-error-status').textContent = 'コピーしました。この内容を貼り付けて共有できます。';
+  } catch {
+    if ($('error-report').value === report) {
+      $('error-details').open = true; $('error-report').focus(); $('error-report').select();
+      $('copy-error-status').textContent = 'コピーできませんでした。選択された詳細を Ctrl+C（Macは⌘C）でコピーしてください。';
+    }
+  } finally { if ($('error-report').value === report) $('copy-error-details').disabled = false; }
+}
 function releaseEngine() { if (engine) engine.terminate(); engine = null; prepared = false; }
 function clearResult() {
   $('output-preview').pause(); $('output-preview').removeAttribute('src'); $('output-preview').load();
@@ -47,11 +89,14 @@ function renderInfo() {
   $('source-details').textContent = info ? `${(info.codec || '').toUpperCase()}${info.audio ? ` / ${info.audio.toUpperCase()}` : ' / 音声なし'}${info.fps ? ` · ${Number(info.fps.toFixed(2))} fps` : ''} · ブラウザ内で読み込み済み` : '動画の情報を確認しています…';
 }
 async function readProbe(ff, path, id, out = 'metadata.json') {
-  const code = await ff.ffprobe(['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path, '-o', out]);
+  diagnosticStage = out === 'metadata.json' ? '入力動画の解析' : '出力動画の検証';
+  const args = ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path, '-o', out];
+  diagnosticCommand = ['ffprobe', ...args];
+  const code = await ff.ffprobe(args);
   assertCurrent(id);
   // core 0.12.10 can leave ret at -1 after a successful ffprobe. Validate its JSON,
   // rather than accepting the return value alone as proof of successful probing.
-  if (code !== 0 && code !== -1) throw new Error('動画を読み込めませんでした。未対応の形式、または壊れたファイルの可能性があります。');
+  if (code !== 0 && code !== -1) throw Object.assign(new Error('動画を読み込めませんでした。未対応の形式、または壊れたファイルの可能性があります。'), { exitCode: code });
   try {
     const text = await ff.readFile(out, 'utf8');
     assertCurrent(id);
@@ -59,15 +104,17 @@ async function readProbe(ff, path, id, out = 'metadata.json') {
     return summarizeProbe(JSON.parse(text));
   } catch (error) {
     assertCurrent(id);
-    throw new Error('動画の情報を読み込めませんでした。未対応の形式、または壊れたファイルの可能性があります。');
+    throw Object.assign(new Error('動画の情報を読み込めませんでした。未対応の形式、または壊れたファイルの可能性があります。', { cause: error }), { exitCode: code });
   }
 }
 async function prepare(id) {
   if (prepared && engine?.loaded) return engine;
   status('変換プログラムを準備しています…', '初回は約32MBを読み込みます。動画は送信されません。');
+  diagnosticStage = '変換プログラムの読み込み'; diagnosticCommand = [];
   engineConfig = selectEngineConfig({ isolated: globalThis.crossOriginIsolated, sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined', hardwareConcurrency: navigator.hardwareConcurrency, deviceMemory: navigator.deviceMemory }, singleThreadOnly);
+  diagnosticEngine = { ...engineConfig };
   const ff = new FFmpeg(); engine = ff;
-  ff.on('log', ({ message }) => { if (id === generation) { logs.push(message); if (logs.length > 40) logs.shift(); } });
+  ff.on('log', ({ message }) => { if (id === generation && engine === ff) appendDiagnosticLog(logs, message); });
   ff.on('progress', ({ time }) => {
     if (id !== generation || phase !== 'converting' || !info?.duration || time < 0) return;
     lastPercent = Math.max(lastPercent, Math.min(99, Math.floor((time / 1_000_000) / info.duration * 100)));
@@ -80,6 +127,7 @@ async function prepare(id) {
     clearTimeout(loadTimer);
     assertCurrent(id);
     status('動画の形式を確認しています…', 'ファイルの中身を、このブラウザ内で確認しています。');
+    diagnosticStage = '入力ファイルの読み込み';
     await ff.createDir('/input'); assertCurrent(id);
     // WORKERFS reads slices of a local File, avoiding a full input copy in WASM memory.
     const localFile = new File([source], `source.${extension(source.name)}`, { type: source.type });
@@ -87,6 +135,7 @@ async function prepare(id) {
     if (!mounted) throw new Error('動画の読み込みに失敗しました。ページを再読み込みしてください。');
     const path = `/input/${localFile.name}`;
     info = await readProbe(ff, path, id); assertCurrent(id);
+    diagnosticInfo = { ...info };
     if (info.hdr) throw new Error('このバージョンはHDR動画の変換に対応していません。通常のSDR動画を選んでください。');
     prepared = true; renderInfo();
     return ff;
@@ -95,6 +144,7 @@ async function prepare(id) {
     if (engineConfig.mode !== 'multi') throw error;
     // A fresh worker releases the shared heap and partially mounted input.
     console.warn('[Maitake] Parallel engine unavailable; retrying the standard engine.', String(error));
+    recordFallback(error);
     singleThreadOnly = true; releaseEngine();
     return await prepare(id);
   } finally { clearTimeout(loadTimer); }
@@ -107,15 +157,19 @@ async function executeConversion(id, selectedFormat, selectedQuality) {
     status(`${FORMATS[selectedFormat].title}に変換しています…`, 'このタブを閉じずにお待ちください。キャンセルはいつでもできます。', !!info.duration);
     $('progress-fill').style.width = '0%'; $('progress').setAttribute('aria-valuenow', '0');
     try {
-      const result = await ff.exec(buildArgs({ input: `/input/source.${extension(source.name)}`, format: selectedFormat, quality: selectedQuality, info, threads: engineConfig.threads }));
+      diagnosticStage = '動画の変換'; diagnosticCommand = [];
+      const args = buildArgs({ input: `/input/source.${extension(source.name)}`, format: selectedFormat, quality: selectedQuality, info, threads: engineConfig.threads });
+      diagnosticCommand = ['ffmpeg', ...args];
+      const result = await ff.exec(args);
       assertCurrent(id);
-      if (result !== 0) throw new Error('変換に失敗しました。未対応の圧縮形式、またはメモリ不足の可能性があります。別の形式や「軽量」でお試しください。');
+      if (result !== 0) throw Object.assign(new Error('変換に失敗しました。未対応の圧縮形式、またはメモリ不足の可能性があります。別の形式や「軽量」でお試しください。'), { exitCode: result });
       return { ff, inputInfo };
     } catch (error) {
       assertCurrent(id);
       if (engineConfig.mode !== 'multi') throw error;
       // Retry only once, preserving settings and discarding all partial output.
       console.warn('[Maitake] Parallel conversion failed; retrying the standard engine.', String(error));
+      recordFallback(error);
       singleThreadOnly = true; releaseEngine(); lastPercent = 0; phase = 'preparing';
     }
   }
@@ -123,7 +177,8 @@ async function executeConversion(id, selectedFormat, selectedQuality) {
 async function selectFile(file) {
   if (busy || !file) return;
   clearError();
-  try { validateFile(file); } catch (error) { showError(error.message); return; }
+  resetDiagnostics(file); diagnosticStage = '入力ファイルの確認';
+  try { validateFile(file); } catch (error) { showError(error.message, error); return; }
   const id = ++generation;
   releaseEngine(); clearResult();
   if (inputURL) URL.revokeObjectURL(inputURL);
@@ -140,9 +195,9 @@ async function selectFile(file) {
     $('status-card').hidden = true;
   } catch (error) {
     if (id !== generation) return;
-    releaseEngine(); info = null;
+    showError(friendlyError(error), error); releaseEngine(); info = null;
     $('source-details').textContent = 'このファイルの形式を確認できませんでした。';
-    showError(friendlyError(error)); $('status-card').hidden = true;
+    $('status-card').hidden = true;
   } finally { if (id === generation) { phase = ''; setBusy(false); } }
 }
 function friendlyError(error) {
@@ -155,6 +210,11 @@ function friendlyError(error) {
 async function convert() {
   if (busy || !source || !info) return;
   clearError(); clearResult();
+  // Keep preparation failures when conversion reuses that same fallback engine.
+  const preparationAttempts = prepared && engine?.loaded ? diagnosticAttempts : [];
+  resetDiagnostics(source, { ...info });
+  diagnosticAttempts = preparationAttempts;
+  if (prepared && engine?.loaded) diagnosticEngine = { ...engineConfig };
   // Keep the generation while reusing a prepared engine and its progress callbacks.
   const id = generation, selectedFormat = format, selectedQuality = quality;
   setBusy(true); lastPercent = 0; phase = 'preparing';
@@ -169,7 +229,9 @@ async function convert() {
     status('変換した動画を確認しています…', 'ファイルを確認して、保存できるようにしています。');
     const outputPath = `output.${selectedFormat}`;
     const verified = await readProbe(ff, outputPath, id, 'output-metadata.json'); assertCurrent(id);
+    diagnosticStage = '出力ファイルの読み込み'; diagnosticCommand = [];
     const data = await ff.readFile(outputPath); assertCurrent(id);
+    diagnosticStage = '出力ファイルの確認';
     if (!data.length || data.length >= MAX_OUTPUT_BYTES || (inputInfo.duration > 0 && verified.duration > 0 && verified.duration < inputInfo.duration - Math.max(0.75, 3 / (inputInfo.fps || 24)))) {
       throw new Error('出力上限の600MBに達したか、動画の途中で変換が止まりました。途中の動画は保存しません。MP4・WebM、または「軽量」でお試しください。');
     }
@@ -190,7 +252,7 @@ async function convert() {
   } catch (error) {
     if (id !== generation) return;
     console.warn('[Maitake] Local conversion diagnostic:', String(error), logs.join('\n'));
-    showError(friendlyError(error)); releaseEngine(); $('status-card').hidden = true;
+    showError(friendlyError(error), error); releaseEngine(); $('status-card').hidden = true;
   } finally {
     if (id === generation) { clearInterval(progressTimer); progressTimer = null; phase = ''; setBusy(false); }
   }
@@ -216,6 +278,7 @@ $('input-preview').addEventListener('error', () => { if (source) { $('input-prev
 $('output-preview').addEventListener('error', () => { $('output-preview').hidden = true; $('output-preview-note').hidden = false; $('output-preview-note').textContent = 'このブラウザでプレビューできません。保存して対応プレーヤーで再生してください。'; });
 $('convert').addEventListener('click', () => void convert());
 $('cancel').addEventListener('click', cancel);
+$('copy-error-details').addEventListener('click', () => void copyErrorDetails());
 document.querySelectorAll('input[name="format"],input[name="quality"]').forEach(input => input.addEventListener('change', () => {
   if (busy) return;
   format = document.querySelector('input[name="format"]:checked').value;
@@ -228,16 +291,17 @@ document.addEventListener('drop', e => { if (e.dataTransfer?.types.includes('Fil
 const dropTarget = $('converter');
 dropTarget.addEventListener('dragenter', e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); dragDepth++; if (!busy) $('dropzone').classList.add('dragging'); } });
 dropTarget.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('dropzone').classList.remove('dragging'); } });
-dropTarget.addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('dropzone').classList.remove('dragging'); if (busy) return; if (e.dataTransfer.files.length !== 1) showError('動画は1ファイルずつ選んでください。'); else void selectFile(e.dataTransfer.files[0]); });
+dropTarget.addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('dropzone').classList.remove('dragging'); if (busy) return; if (e.dataTransfer.files.length !== 1) { resetDiagnostics(); diagnosticStage = '入力ファイルの選択'; showError('動画は1ファイルずつ選んでください。'); } else void selectFile(e.dataTransfer.files[0]); });
 $('sample').addEventListener('click', async () => {
   if (busy) return;
   const id = generation; setBusy(true); clearError();
+  resetDiagnostics(); diagnosticStage = 'サンプル動画の読み込み';
   try {
     const response = await fetch(assetURL('./assets/sample.webm'));
-    if (!response.ok) throw new Error('サンプルを読み込めませんでした。');
+    if (!response.ok) throw new Error(`サンプルを読み込めませんでした。HTTP ${response.status}`);
     const blob = await response.blob(); assertCurrent(id); setBusy(false);
     await selectFile(new File([blob], 'quiet-coast.webm', { type: 'video/webm' }));
-  } catch (error) { if (id === generation) { setBusy(false); showError(friendlyError(error)); } }
+  } catch (error) { if (id === generation) { setBusy(false); showError(friendlyError(error), error); } }
 });
 $('privacy-open').addEventListener('click', () => $('privacy-dialog').showModal());
 $('privacy-close').addEventListener('click', () => $('privacy-dialog').close());

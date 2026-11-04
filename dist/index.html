@@ -35,7 +35,15 @@
       <span class="privacy-notice-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span>
       <div><h2>動画データは、どこにもアップロードされません。</h2><p>選択した動画・音声・ファイル名を外部に送信せず、変換はすべてこのブラウザ内で行います。</p></div>
     </section>
-    <div id="error" class="error-banner" role="alert" hidden></div>
+    <section id="error" class="error-banner" aria-label="エラー情報" hidden>
+      <p id="error-message" role="alert"></p>
+      <details id="error-details" class="error-details" open>
+        <summary>エラーの詳細</summary>
+        <p id="error-help">この内容をコピーして、修正を依頼する際に貼り付けてください。</p>
+        <textarea id="error-report" aria-label="エラーの詳細（共有用）" aria-describedby="error-help" readonly spellcheck="false" rows="10"></textarea>
+        <div class="error-actions"><button id="copy-error-details" type="button">エラーの詳細をコピー</button><span id="copy-error-status" role="status"></span></div>
+      </details>
+    </section>
     <section class="converter" id="converter" aria-label="動画変換">
       <div class="source-panel">
         <div class="section-heading"><h2><span class="step">01</span>動画を選ぶ</h2><span class="muted tiny">最大300MB・1ファイルずつ</span></div>
