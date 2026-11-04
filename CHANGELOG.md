@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Snapshot selected input bytes before probing so disk-file changes cannot interrupt conversion or engine fallback; explain unreadable files without an ineffective engine retry.
+- Preserve variable frame timing instead of duplicating frames at an inferred high rate when WebM frame-rate metadata is missing.
 - Show copyable error details, including the original exception, failed operation, conversion settings, FFmpeg logs, and any parallel-engine retry.
 - Use a multi-thread FFmpeg engine with bounded codec/filter concurrency on supported browsers, preserving output formats and quality settings.
 - Fall back to the single-thread engine when parallel initialization or conversion fails.

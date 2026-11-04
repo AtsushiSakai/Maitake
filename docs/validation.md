@@ -1,5 +1,16 @@
 # Maitake 0.1.0 validation
 
+## Unreleased WebM input and frame timing fix — 2026-11-04
+
+- All 20 unit tests pass, including chunked input snapshots, read failures, cancellation, and the unknown-rate conversion recipe. The static vendor build and `git diff --check` pass.
+- `scripts/check-frame-timing.mjs` exercises the actual bundled single-thread FFmpeg WASM, using an embedded synthetic VP8 WebM with 30 frames, a 3.010-second duration, `avg_frame_rate=0/0`, and `r_frame_rate=1000/1`. Removing the fix reproduces 3,073 output frames. The fixed highest-quality MP4/MOV/AVI/WebM outputs each have 30 frames, preserve frame timestamps within 1.1ms, and fully decode. Medium/light remain bounded at 30fps (89 output frames). The ordinary 24fps sample keeps all 120 frames in all four formats.
+- Nine browser smoke checks pass in local macOS Chrome 156 under `/Maitake/`: four output formats, initialization and conversion fallback, non-isolated single-thread mode, preparation cancellation/retry, and conversion cancellation/retry. Ten existing error UI checks also pass.
+- Eight targeted Chrome checks pass in `scripts/check-input-regression.mjs`: overwrite/delete the original disk file after loading and confirm the original File really throws `NotReadableError`/`NotFoundError`, then convert successfully from the snapshot; reconvert after engine release; retry through the single-thread engine; explain both read-error types and recover after reselection; cancel a delayed snapshot without replacing a newer selection; avoid retrying a worker read error; and convert the unknown-rate WebM at highest quality to exactly 30 frames. Downloaded outputs fully decode. Reports and screenshots are under `evidence/input-regression/`.
+- Input snapshots require browser-managed storage approximately equal to the input size, with temporary 8MiB read buffers. WORKERFS avoids a second full input copy inside the WASM heap. Large-input peak memory has not been remeasured with this change.
+- The supplied diagnostic log establishes a missing/unreadable input during conversion and excessive frame duplication, but does not identify why the original Windows file became inaccessible. The original user video and Windows device have not been tested. The encoder can still advertise an unnecessarily high H.264 level from the nominal rate; this fix preserves actual frame timing and does not claim new standard-player compatibility.
+
+Reproduce the frame-timing check after `pnpm build` with `node scripts/check-frame-timing.mjs`. It writes synthetic fixtures, converted outputs, and a JSON report under `evidence/frame-timing/` (not committed or published). File-read behavior follows the [File API error definitions](https://www.w3.org/TR/FileAPI/#errorsAndExceptions); output synchronization is controlled explicitly with FFmpeg's [`fps_mode`](https://ffmpeg.org/ffmpeg.html#Advanced-Video-options).
+
 ## Unreleased error details validation — 2026-11-03
 
 - All 15 automated tests pass, including original errors/causes/exit codes, fallback history, and bounded diagnostics.

@@ -2,6 +2,7 @@ import { FFmpeg } from './vendor/ffmpeg/index.js';
 import { FORMATS, QUALITIES, MAX_OUTPUT_BYTES, validateFile, extension, outputName, summarizeProbe, buildArgs } from './recipes.js';
 import { selectEngineConfig, coreURLs } from './engine-config.js';
 import { appendDiagnosticLog, buildDiagnosticReport } from './diagnostics.js';
+import { snapshotFile, isInputReadError } from './input-file.js';
 
 const $ = id => document.getElementById(id);
 let source = null, info = null, engine = null, prepared = false, busy = false;
@@ -129,7 +130,7 @@ async function prepare(id) {
     status('動画の形式を確認しています…', 'ファイルの中身を、このブラウザ内で確認しています。');
     diagnosticStage = '入力ファイルの読み込み';
     await ff.createDir('/input'); assertCurrent(id);
-    // WORKERFS reads slices of a local File, avoiding a full input copy in WASM memory.
+    // WORKERFS reads our browser-owned snapshot, without another full WASM copy.
     const localFile = new File([source], `source.${extension(source.name)}`, { type: source.type });
     const mounted = await ff.mount('WORKERFS', { files: [localFile] }, '/input'); assertCurrent(id);
     if (!mounted) throw new Error('動画の読み込みに失敗しました。ページを再読み込みしてください。');
@@ -141,7 +142,7 @@ async function prepare(id) {
     return ff;
   } catch (error) {
     assertCurrent(id);
-    if (engineConfig.mode !== 'multi') throw error;
+    if (engineConfig.mode !== 'multi' || isInputReadError(error)) throw error;
     // A fresh worker releases the shared heap and partially mounted input.
     console.warn('[Maitake] Parallel engine unavailable; retrying the standard engine.', String(error));
     recordFallback(error);
@@ -166,7 +167,7 @@ async function executeConversion(id, selectedFormat, selectedQuality) {
       return { ff, inputInfo };
     } catch (error) {
       assertCurrent(id);
-      if (engineConfig.mode !== 'multi') throw error;
+      if (engineConfig.mode !== 'multi' || isInputReadError(error)) throw error;
       // Retry only once, preserving settings and discarding all partial output.
       console.warn('[Maitake] Parallel conversion failed; retrying the standard engine.', String(error));
       recordFallback(error);
@@ -186,11 +187,17 @@ async function selectFile(file) {
   $('dropzone').hidden = true; $('selected-file').hidden = false;
   $('file-name').textContent = file.name;
   $('file-type').textContent = extension(file.name).toUpperCase();
-  inputURL = URL.createObjectURL(file);
-  $('input-preview').hidden = false; $('preview-unavailable').hidden = true;
-  $('input-preview').src = inputURL;
+  inputURL = null;
+  $('input-preview').pause(); $('input-preview').removeAttribute('src'); $('input-preview').load();
+  $('input-preview').hidden = true; $('preview-unavailable').hidden = true;
   renderInfo(); setBusy(true);
   try {
+    status('動画を読み込んでいます…', '変換中も使えるよう、動画全体をこのブラウザ内で読み込みます。動画は送信されません。');
+    diagnosticStage = '入力ファイルの読み込み';
+    const snapshot = await snapshotFile(file, () => assertCurrent(id)); assertCurrent(id);
+    source = snapshot;
+    inputURL = URL.createObjectURL(source);
+    $('input-preview').hidden = false; $('input-preview').src = inputURL;
     await prepare(id); assertCurrent(id);
     $('status-card').hidden = true;
   } catch (error) {
@@ -202,6 +209,7 @@ async function selectFile(file) {
 }
 function friendlyError(error) {
   const text = String(error?.message || error);
+  if (isInputReadError(error)) return '入力ファイルを読み取れませんでした。ダウンロード・録画が完了していることを確認し、動画をPC内のフォルダーに保存して選び直してください。';
   if (/out of memory|cannot enlarge|allocation/i.test(text)) return 'ブラウザのメモリが不足しました。小さい動画や「軽量」でお試しください。';
   if (/out of bounds|Aborted\(/i.test(text)) return '変換エンジンでエラーが発生しました。別の出力形式や「軽量」でお試しください。';
   if (/fetch|network|import|Failed to load/i.test(text)) return '変換プログラムを読み込めませんでした。接続を確認して、ページを再読み込みしてください。';

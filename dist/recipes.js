@@ -43,7 +43,10 @@ export function buildArgs({ input, format, quality, info, threads = 1 }) {
     filters.push(`scale=w='if(gte(iw,ih),min(iw,${q.long}),min(iw,${q.short}))':h='if(gte(iw,ih),min(ih,${q.short}),min(ih,${q.long}))':force_original_aspect_ratio=decrease:force_divisible_by=2`);
     if (info.fps > 30 || !info.fps) filters.push('fps=30');
   }
-  const args = ['-hide_banner', '-loglevel', 'info', '-threads', String(threads), '-i', input, '-map', `0:${info.videoIndex}`, '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-vf', filters.join(','), '-ac', '2', '-ar', '48000'];
+  // Browser recordings can have no average frame rate and a nominal rate such as
+  // 1000 fps. The MP4/MOV muxers otherwise select CFR and duplicate every frame
+  // to that rate. Keep frame timestamps (including after the optional fps cap).
+  const args = ['-hide_banner', '-loglevel', 'info', '-threads', String(threads), '-i', input, '-map', `0:${info.videoIndex}`, '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-vf', filters.join(','), '-fps_mode', 'vfr', '-ac', '2', '-ar', '48000'];
   if (threads > 1) args.push('-filter_threads', String(threads));
   if (format === 'mp4' || format === 'mov') {
     args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(q.crf), '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', q.audio, '-movflags', '+faststart');

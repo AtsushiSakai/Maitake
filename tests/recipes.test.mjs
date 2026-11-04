@@ -33,6 +33,24 @@ test('highest preserves frame rate, capped modes never raise low frame rates', (
   assert.doesNotMatch(option(args('mp4', 'light', { ...info, fps: 24 }), '-vf'), /fps=/);
   assert.match(option(args('mp4', 'light'), '-vf'), /1280.*720/);
 });
+test('unknown-rate browser recordings keep timestamps without uncontrolled CFR duplication', () => {
+  const recording = summarizeProbe({ streams: [
+    { index: 0, codec_type: 'video', width: 1910, height: 1076, avg_frame_rate: '0/0', r_frame_rate: '1000/1' },
+  ] });
+  // r_frame_rate is not a trustworthy fallback for variable-rate recordings.
+  assert.equal(recording.fps, 0);
+  for (const format of ['mp4', 'mov', 'avi', 'webm']) {
+    const high = args(format, 'high', recording);
+    assert.equal(option(high, '-fps_mode'), 'vfr');
+    assert.doesNotMatch(option(high, '-vf'), /fps=/);
+    assert.ok(!high.includes('-r'));
+    for (const quality of ['medium', 'light']) {
+      const capped = args(format, quality, recording);
+      assert.equal(option(capped, '-fps_mode'), 'vfr');
+      assert.match(option(capped, '-vf'), /fps=30/);
+    }
+  }
+});
 test('quality levels change actual compression, and optional audio is mapped', () => {
   assert.deepEqual(['high', 'medium', 'light'].map(q => option(args('mp4', q), '-crf')), ['18', '23', '28']);
   assert.ok(args('mp4').includes('0:a:0?'));
